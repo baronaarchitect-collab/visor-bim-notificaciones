@@ -4,8 +4,29 @@
     {
       "name": "bim-hub-visor",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--prefix", "worker", "wrangler", "dev", "--config", "worker/wrangler.toml", "--port", "8787"],
+      "runtimeArgs": [
+        "--prefix",
+        "worker",
+        "wrangler",
+        "dev",
+        "--config",
+        "worker/wrangler.toml",
+        "--port",
+        "8787"
+      ],
       "port": 8787
+    },
+    {
+      "name": "demo-pages",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8152",
+        "--directory",
+        "_pages"
+      ],
+      "port": 8152
     }
   ]
 }

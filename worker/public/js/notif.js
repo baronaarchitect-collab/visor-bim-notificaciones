@@ -281,7 +281,8 @@ export async function montarCampana(host, ctx = {}) {
   if (q) {
     const n = items.find((x) => String(x.id) === q);
     if (n) abrirVenta(n, ctx);
-    history.replaceState(null, "", location.pathname);
+    const u = new URL(location.href); u.searchParams.delete("notif");
+    history.replaceState(null, "", u.pathname + u.search + u.hash);
   }
   return { recargar: cargar };
 }

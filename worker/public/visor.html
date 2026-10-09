@@ -275,7 +275,7 @@
     import { montarCampana, barraAvance, abrirVenta } from "/js/notif.js";
 
     const $ = (id) => document.getElementById(id);
-    const SHARE = location.pathname.split("/")[2] || new URLSearchParams(location.search).get("p");
+    const SHARE = new URLSearchParams(location.search).get("p") || location.pathname.split("/")[2];
     const API = `/api/p/${SHARE}`;
     const fileUrl = (key) => `${API}/file?key=${encodeURIComponent(key)}`;
     const fdate = (s) => s ? new Date(s.replace(" ", "T") + "Z").toLocaleDateString("es-CO", { dateStyle: "medium" }) : "";

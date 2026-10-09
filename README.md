@@ -4,6 +4,12 @@
 > (`lifecity-bim-hub`). Agrega **avances de obra y notificaciones** que venden la **página de ventas con respuesta
 > automática** del proyecto. Desplegar desde aquí reemplaza la versión del repo 96 (es compatible: solo agrega tablas).
 
+**Demo en vivo (GitHub Pages):** https://baronaarchitect-collab.github.io/visor-bim-notificaciones/
+La demo usa la misma interfaz con una API simulada en el navegador (`demo/demo.js`) y una torre de ejemplo de 12 pisos
+en obra (`demo/generar_ifc.py`). Se arma con `node demo/build.mjs` y se publica sola en cada push a `main`
+(`.github/workflows/pages.yml`). Sin login de Google ni push; el formulario de la página de ventas sí crea el lead en el
+CRM con origen *Demo visor BIM*.
+
 Evolución del plugin **VisorPublisher** (repo 45 / 29 v2): Revit publica el modelo 3D (IFC + cantidades)
 y los planos (PDF) a Cloudflare, y los profesionales los ven en un visor web **entrando con Google**.
 
