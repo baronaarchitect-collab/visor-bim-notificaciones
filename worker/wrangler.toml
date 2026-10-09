@@ -1,0 +1,38 @@
+name = "bim-hub-visor"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# PÃ¡gina web (login, lista de proyectos, visor 3D). /api/* y /p/* pasan primero por el Worker.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/p/*"]
+
+# Base de datos: proyectos, modelos, planos, visitas, fichas tÃ©cnicas, tokens del plugin.
+# El database_id lo completa deploy.ps1 la primera vez.
+[[d1_databases]]
+binding = "DB"
+database_name = "bim_hub_visor"
+database_id = "f98b3ef8-c0ab-4525-bf87-c1b5687e3d3b"
+
+# Bucket R2 PRIVADO (sin acceso pÃºblico): todo se sirve por el Worker con login.
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "bim-hub-privado"
+
+[vars]
+FIREBASE_PROJECT_ID = "lifecity-bim-hub"
+ADMIN_EMAILS = "baronajuandavid@gmail.com,proyectos@lifecity.com.co"
+# Apps que pueden LEER proyectos y modelos desde su dominio (solo GET, con login). Ej.: 5D Budgeting.
+CORS_ORIGINS = "https://presupuesto.lifecity.com.co,https://baronaarchitect-collab.github.io"
+
+# ── Notificaciones push (Firebase Cloud Messaging) ──
+# Llave pública VAPID: Firebase → Configuración del proyecto → Cloud Messaging → Certificados push web → Generar par.
+# La cuenta de servicio va como SECRETO (no aquí):  npx wrangler secret put FCM_SERVICE_ACCOUNT
+# Sin estas dos, los avisos siguen saliendo en la campana del visor; solo se omite el push.
+FCM_VAPID_KEY = ""
+
+# ── Página de ventas con respuesta automática (lo que venden las notificaciones) ──
+# Opcionales: link a una página de ventas de ejemplo y WhatsApp del equipo comercial (con indicativo, ej. 573001234567).
+VENTAS_DEMO_URL = ""
+VENTAS_WHATSAPP = ""

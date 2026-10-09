@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visor 3D · BIM Hub</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <style>
+    body { overflow: hidden; }
+    #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+    #main { position: relative; flex: 1; display: flex; min-height: 0; }
+    #viewport { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+    #viewport canvas { display: block; touch-action: none; }
+    #overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: rgba(13,17,23,.88); z-index: 5; transition: opacity .4s; text-align: center; padding: 16px; }
+    #overlay.hidden { opacity: 0; pointer-events: none; }
+    .spinner { width: 42px; height: 42px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress { width: 240px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+    #overlay-text { color: var(--muted); font-size: 14px; }
+
+    /* Panel lateral */
+    #side { width: 330px; flex: none; background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 6; }
+    #side.collapsed { display: none; }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); }
+    .tab { flex: 1; padding: 9px 4px; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-size: 13px; cursor: pointer; font-family: inherit; }
+    .tab.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+    .tab .count { font-size: 11px; background: var(--panel2); border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+    .side-scroll { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+    .card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .card h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .card h3 .lnk { cursor: pointer; color: var(--accent); text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 13px; }
+    .row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; width: 15px; height: 15px; flex: none; }
+    .row label { cursor: pointer; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .state { color: var(--muted); font-size: 11px; flex: none; }
+    .row .num { color: var(--muted); font-size: 11px; font-family: ui-monospace, Consolas, monospace; flex: none; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); cursor: pointer; color: var(--muted); }
+    .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .catrow { display: flex; flex-direction: column; gap: 2px; padding: 5px 0; border-bottom: 1px solid var(--border); }
+    .catrow:last-child { border-bottom: none; }
+    .catrow .top { display: flex; align-items: center; gap: 8px; }
+    .catrow .name { flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+    .catrow .name:hover { color: var(--accent); }
+    .catrow .val { font-variant-numeric: tabular-nums; font-size: 12px; }
+    .catrow.sel .name { color: var(--accent); font-weight: 600; }
+    .bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-left: 24px; }
+    .bar > div { height: 100%; background: var(--accent); }
+    .totline { display: flex; justify-content: space-between; font-size: 13px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+    .docitem { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .docitem:last-child { border-bottom: none; }
+    .docitem:hover .dt { color: var(--accent); }
+    .docitem .ic { width: 30px; height: 30px; border-radius: 6px; background: rgba(240,136,62,.15); color: var(--doc); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex: none; }
+    .docitem .dt { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .docitem .dm { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .docitem > div:nth-child(2) { min-width: 0; flex: 1; }
+
+    /* Paneles flotantes sobre el 3D */
+    .float { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; z-index: 7; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    #drill { top: 12px; right: 12px; width: 340px; max-height: calc(100% - 24px); overflow: auto; padding: 12px; display: none; }
+    #drill h3 { font-size: 14px; margin-bottom: 2px; }
+    #drill .sub { color: var(--muted); font-size: 11px; margin-bottom: 10px; }
+    #drill table, #props table { width: 100%; border-collapse: collapse; }
+    #drill th, #drill td { padding: 4px 6px; border-bottom: 1px solid var(--border); text-align: left; }
+    #drill th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    #drill .num { text-align: right; font-variant-numeric: tabular-nums; }
+    #drill tr.click { cursor: pointer; }
+    #drill tr.click:hover td { background: var(--panel2); }
+    .x { float: right; cursor: pointer; color: var(--muted); font-size: 14px; line-height: 1; padding: 2px 4px; }
+    .x:hover { color: var(--text); }
+    .back { cursor: pointer; color: var(--accent); display: inline-block; margin-bottom: 6px; }
+
+    #props { bottom: 12px; right: 12px; width: 340px; max-height: calc(100% - 24px); overflow: auto; padding: 12px; display: none; }
+    #props h3 { font-size: 14px; margin-bottom: 8px; padding-right: 20px; overflow-wrap: anywhere; }
+    #props td { padding: 3px 4px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+    #props td:first-child { color: var(--muted); white-space: nowrap; width: 1%; }
+    .docsec { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+    .docsec h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--doc); margin-bottom: 6px; }
+    .docrow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+    .docrow .dn { flex: 1; min-width: 0; }
+    .docrow .dn b { display: block; font-weight: 500; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .upl { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .upl input[type=file] { font-size: 12px; color: var(--muted); width: 100%; }
+    .upl .pbar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .upl .pbar > div { height: 100%; width: 0; background: var(--doc); }
+
+    /* Ventanas de planos (PDF) */
+    .pwin { position: absolute; display: flex; flex-direction: column; width: 560px; height: 420px; min-width: 260px; min-height: 180px; resize: both; overflow: hidden; z-index: 8; }
+    .pwin.max { left: 8px !important; top: 8px !important; width: calc(100% - 16px) !important; height: calc(100% - 16px) !important; resize: none; }
+    .pwin .ph { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel2); border-bottom: 1px solid var(--border); cursor: move; user-select: none; touch-action: none; }
+    .pwin .ph b { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pwin .ph .btn { padding: 2px 7px; font-size: 12px; }
+    .pwin .pb { flex: 1; position: relative; background: #525659; }
+    .pwin iframe, .pwin img { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; object-fit: contain; }
+    .pwin .pload { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #ddd; font-size: 13px; }
+    body.dragging iframe { pointer-events: none; }
+
+    /* Pestañas de la barra superior */
+    .views { display: flex; gap: 2px; background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 2px; flex: none; }
+    .views button { background: none; border: none; color: var(--muted); font-size: 13px; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .views button.on { background: var(--accent); color: #fff; font-weight: 600; }
+    .views .count { font-size: 11px; opacity: .8; margin-left: 4px; }
+    /* Vista de planos */
+    #planos-view { flex: 1; display: flex; min-height: 0; }
+    #pv-list { width: 340px; flex: none; background: var(--panel); border-right: 1px solid var(--border); overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    #pv-doc { flex: 1; min-width: 0; position: relative; background: #525659; display: flex; flex-direction: column; }
+    #pv-doc .pv-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--panel2); border-bottom: 1px solid var(--border); font-size: 13px; }
+    #pv-doc .pv-bar b { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #pv-doc .pv-body { flex: 1; position: relative; }
+    #pv-doc iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    #pv-doc .pload { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #ddd; font-size: 14px; text-align: center; padding: 16px; }
+    .grp { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: none; }
+    .grp-h { display: flex; align-items: center; gap: 6px; padding: 8px 10px; cursor: pointer; user-select: none; }
+    .grp-h .car { color: var(--muted); font-size: 10px; width: 10px; transition: transform .15s; }
+    .grp.closed .car { transform: rotate(-90deg); }
+    .grp.closed .grp-b { display: none; }
+    .grp-h .gn { flex: 1; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .grp-h .gc { font-size: 11px; color: var(--muted); }
+    .grp-h .ed { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+    .grp-h .ed:hover { color: var(--accent); }
+    .grp-h input { flex: 1; min-width: 0; padding: 3px 6px; font-size: 13px; }
+    .pl { display: flex; gap: 8px; align-items: baseline; padding: 7px 10px; border-top: 1px solid var(--border); cursor: pointer; font-size: 13px; }
+    .pl:hover { background: rgba(47,129,247,.08); }
+    .pl.on { background: rgba(47,129,247,.18); }
+    .pl .num { color: var(--muted); font-size: 11px; font-family: ui-monospace, Consolas, monospace; flex: none; }
+    .pl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .grp-sub { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 8px 0 2px; }
+    /* Propiedades principales del elemento */
+    .keyprops { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+    .keyprops .kp { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; min-width: 0; }
+    .keyprops .kp.wide { grid-column: 1 / -1; }
+    .keyprops .kl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+    .keyprops .kv { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .keyprops .ku { font-size: 11px; font-weight: 400; color: var(--muted); }
+    .keyprops .src { grid-column: 1 / -1; font-size: 10px; color: var(--muted); }
+    details.more summary { cursor: pointer; color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+
+    footer { padding: 6px 16px; background: var(--panel); border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+    #noaccess { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: var(--bg); padding: 16px; }
+
+    @media (max-width: 760px) {
+      header.top { flex-wrap: wrap; row-gap: 6px; }
+      header.top .actions { flex: 1 1 100%; flex-wrap: nowrap; overflow-x: auto; padding-top: 6px; }
+      #side { position: absolute; inset: 0 auto 0 0; width: min(330px, 88vw); box-shadow: 8px 0 24px rgba(0,0,0,.5); }
+      .actions .opt { display: none; }
+      #props, #drill { width: auto; left: 8px; right: 8px; }
+      #planos-view { flex-direction: column; }
+      #pv-list { width: auto; max-height: 40%; border-right: none; border-bottom: 1px solid var(--border); }
+      .views button { padding: 5px 8px; }
+      #props { max-height: 55%; bottom: 8px; }
+      .pwin { width: calc(100% - 16px) !important; left: 8px !important; }
+      footer .hint-long { display: none; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.152.2/build/three.module.js",
+      "three/examples/jsm/controls/OrbitControls": "https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js",
+      "three/examples/jsm/utils/BufferGeometryUtils": "https://unpkg.com/three@0.152.2/examples/jsm/utils/BufferGeometryUtils.js",
+      "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.5.21/build/index.module.js",
+      "web-ifc": "https://unpkg.com/web-ifc@0.0.39/web-ifc-api.js",
+      "web-ifc-three": "https://unpkg.com/web-ifc-three@0.0.126/IFCLoader.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="login" hidden>
+    <div class="login-card">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <h1>Te compartieron un proyecto BIM</h1>
+      <p>Entra con tu cuenta de Google para ver el modelo 3D, los planos y las fichas técnicas.</p>
+      <button class="gbtn" id="btn-google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"/></svg>Continuar con Google</button>
+      <div class="login-err" id="login-err"></div>
+    </div>
+  </div>
+  <div id="noaccess" hidden><div class="login-card"><h1>Proyecto no disponible</h1><p id="noaccess-msg">El link no es válido o el proyecto fue retirado. Pide un link nuevo a quien te lo compartió.</p><a class="btn" href="/">Ir a mis proyectos</a></div></div>
+
+  <div id="app">
+    <header class="top">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <span class="pname" id="pname">Cargando…</span>
+        <span class="avchip" id="avchip" hidden title="Avance de obra · clic para ver cómo venderlo"></span>
+      </div>
+      <div class="views" id="views">
+        <button class="on" data-view="3d">Modelo 3D</button>
+        <button data-view="planos">Planos<span class="count" id="planos-count"></span></button>
+      </div>
+      <div class="actions">
+        <button class="btn v3d" id="btn-side" title="Mostrar/ocultar panel">☰</button>
+        <button class="btn v3d" id="btn-fit">Encuadrar</button>
+        <button class="btn opt v3d" id="btn-reset">Ver todo</button>
+        <button class="btn opt v3d" id="btn-wire">Alámbrico</button>
+        <button class="btn v3d" id="btn-hl" title="Resaltar los elementos que tienen fichas técnicas">📎 Con ficha</button>
+        <button class="btn opt" id="btn-full">Pantalla</button>
+        <a class="btn ghost opt" href="/">Proyectos</a>
+        <span id="bell-host"></span>
+        <div class="user" id="user"></div>
+      </div>
+    </header>
+    <div id="main">
+      <aside id="side">
+        <div class="tabs">
+          <button class="tab on" data-tab="capas">Capas</button>
+          <button class="tab" data-tab="cant">Cantidades</button>
+          <button class="tab" data-tab="fichas">Fichas<span class="count" id="docs-count">0</span></button>
+        </div>
+        <div class="side-scroll" data-pane="capas">
+          <div class="card">
+            <h3>Modelos 3D <span class="lnk" id="models-all">todos</span></h3>
+            <div id="models-list"></div>
+          </div>
+          <div class="card">
+            <h3>Planos <span class="lnk" id="planos-none">cerrar todos</span></h3>
+            <div class="hint" style="margin-bottom:6px">Prende un plano para verlo sobre el 3D. Puedes moverlo, cambiarle el tamaño o maximizarlo.</div>
+            <div id="planos-list"></div>
+          </div>
+        </div>
+        <div class="side-scroll" data-pane="cant" hidden>
+          <div class="card" id="card-metric">
+            <h3>Métrica</h3>
+            <select id="field-select"></select>
+          </div>
+          <div class="card" id="card-levels">
+            <h3>Niveles <span class="lnk" id="lvl-toggle">todos</span></h3>
+            <div id="levels-list" class="chips"></div>
+          </div>
+          <div class="card" id="card-cats">
+            <h3>Categorías <span class="lnk" id="cat-toggle">todas</span></h3>
+            <div class="hint" style="margin-bottom:6px">Marca para ver en 3D · clic en el nombre para desglosar</div>
+            <div id="cats-list"></div>
+            <div class="totline">TOTAL <b id="cats-total">—</b></div>
+          </div>
+          <div class="hint" id="cant-empty" hidden>Este proyecto no tiene datos de cantidades (solo 3D).</div>
+        </div>
+        <div class="side-scroll" data-pane="fichas" hidden>
+          <div class="hint">Haz clic en un elemento del modelo para ver o adjuntar su ficha técnica. Clic en una ficha para ubicar su elemento.</div>
+          <input type="text" id="docs-filter" placeholder="Buscar ficha o elemento…" />
+          <div id="docs-list"></div>
+        </div>
+      </aside>
+      <div id="viewport">
+        <div id="overlay">
+          <div class="spinner"></div>
+          <div class="progress"><div id="bar"></div></div>
+          <div id="overlay-text">Cargando visor…</div>
+        </div>
+        <div id="drill" class="float"><span class="x" id="drill-close">✕</span><div id="drill-body"></div></div>
+        <div id="props" class="float"></div>
+      </div>
+    </div>
+    <div id="planos-view" hidden>
+      <div id="pv-list"></div>
+      <div id="pv-doc">
+        <div class="pv-bar"><b id="pv-title">Planos</b><button class="btn sm" id="pv-tab" hidden>Abrir en pestaña ↗</button><button class="btn sm" id="pv-dl" hidden>Descargar</button></div>
+        <div class="pv-body" id="pv-body"><div class="pload">Elige un plano de la lista.</div></div>
+      </div>
+    </div>
+    <footer>
+      <span class="hint-long">Clic en un elemento: propiedades y fichas · Arrastra para orbitar · Clic derecho para desplazar · Rueda para zoom</span>
+      <span id="stat">—</span>
+    </footer>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+    import { IFCLoader } from "web-ifc-three";
+    import * as WebIFC from "web-ifc";
+    import { requireUser, loginWithGoogle, api, authHeader, getToken, blobUrl, esc, userChip } from "/js/auth.js";
+    import { montarCampana, barraAvance, abrirVenta } from "/js/notif.js";
+
+    const $ = (id) => document.getElementById(id);
+    const SHARE = location.pathname.split("/")[2] || new URLSearchParams(location.search).get("p");
+    const API = `/api/p/${SHARE}`;
+    const fileUrl = (key) => `${API}/file?key=${encodeURIComponent(key)}`;
+    const fdate = (s) => s ? new Date(s.replace(" ", "T") + "Z").toLocaleDateString("es-CO", { dateStyle: "medium" }) : "";
+    const fsize = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+
+    $("btn-google").onclick = async () => {
+      $("login-err").textContent = "";
+      try { await loginWithGoogle(); } catch (e) { $("login-err").textContent = e.code === "auth/popup-closed-by-user" ? "" : (e.message || e); }
+    };
+
+    const viewport = $("viewport"), overlay = $("overlay"), overlayText = $("overlay-text"), bar = $("bar");
+    // En pantallas pequeñas el 3D va primero; el panel se abre con ☰
+    if (innerWidth > 0 && innerWidth <= 760) $("side").classList.add("collapsed");
+
+    // ── Escena three.js ─────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0d1117);
+    const camera = new THREE.PerspectiveCamera(60, viewport.clientWidth / Math.max(1, viewport.clientHeight), 0.1, 5000);
+    camera.position.set(20, 20, 20);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    viewport.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const d1 = new THREE.DirectionalLight(0xffffff, 0.9); d1.position.set(10, 20, 10); scene.add(d1);
+    const d2 = new THREE.DirectionalLight(0xffffff, 0.4); d2.position.set(-10, 10, -10); scene.add(d2);
+    const grid = new THREE.GridHelper(100, 100, 0x1c2128, 0x1c2128); scene.add(grid);
+    (function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); })();
+    function onResize() {
+      camera.aspect = viewport.clientWidth / Math.max(1, viewport.clientHeight);
+      camera.updateProjectionMatrix();
+      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
+    }
+    new ResizeObserver(onResize).observe(viewport);
+
+    const loader = new IFCLoader();
+    loader.ifcManager.setWasmPath("https://unpkg.com/web-ifc@0.0.39/");
+
+    // Materiales de resaltado (polygonOffset para dibujarse encima del modelo)
+    const mkMat = (color, opacity) => new THREE.MeshLambertMaterial({ color, transparent: true, opacity, depthTest: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+    const selMat = mkMat(0x2f81f7, 0.85);
+    const docMat = mkMat(0xf0883e, 0.8);
+
+    // ── Estado ───────────────────────────────────────────────────
+    let project = null;
+    const entries = [];              // { cfg, mesh, tagMap, gidMap, subset, indexed, enabled, cb, state }
+    let allEls = [];                 // [{tag, cat, fam, typ, lvl, q, ei}]
+    const schedulesByCat = new Map();
+    let fields = ["Conteo"], curField = "Conteo";
+    const catSel = new Set(), lvlSel = new Set();
+    let allCats = [], allLvls = [];
+    let filterTimer = null;
+    let docs = [];                   // fichas del proyecto
+    let highlightDocs = false;
+    let selected = null;             // { entry, id, props, tag, gid, name }
+
+    const PRODUCT_TYPES = [
+      "IFCWALL","IFCWALLSTANDARDCASE","IFCSLAB","IFCROOF","IFCBEAM","IFCCOLUMN","IFCDOOR","IFCWINDOW",
+      "IFCSTAIR","IFCSTAIRFLIGHT","IFCRAILING","IFCRAMP","IFCRAMPFLIGHT","IFCFOOTING","IFCPILE",
+      "IFCCOVERING","IFCCURTAINWALL","IFCPLATE","IFCMEMBER","IFCBUILDINGELEMENTPROXY","IFCBUILDINGELEMENTPART",
+      "IFCFURNISHINGELEMENT","IFCFURNITURE","IFCSYSTEMFURNITUREELEMENT",
+      "IFCFLOWTERMINAL","IFCFLOWSEGMENT","IFCFLOWFITTING","IFCFLOWCONTROLLER","IFCFLOWMOVINGDEVICE",
+      "IFCFLOWSTORAGEDEVICE","IFCFLOWTREATMENTDEVICE","IFCENERGYCONVERSIONDEVICE",
+      "IFCDISTRIBUTIONFLOWELEMENT","IFCDISTRIBUTIONCONTROLELEMENT","IFCCABLECARRIERSEGMENT","IFCCABLECARRIERFITTING",
+      "IFCLIGHTFIXTURE","IFCSANITARYTERMINAL","IFCSPACEHEATER","IFCAIRTERMINAL","IFCELECTRICAPPLIANCE",
+      "IFCREINFORCINGBAR","IFCREINFORCINGMESH","IFCSPACE"
+    ].map((n) => WebIFC[n]).filter((v) => typeof v === "number");
+
+    function fmt(n) {
+      if (n == null || isNaN(n)) return "—";
+      return n.toLocaleString("es", { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 });
+    }
+    function unitFor(field) {
+      for (const list of schedulesByCat.values()) for (const s of list) for (const f of s.fields) if (f.name === field && f.unit) return f.unit;
+      return "";
+    }
+    async function fetchJson(key) {
+      try { const r = await fetch(fileUrl(key), { headers: await authHeader() }); return r.ok ? await r.json() : null; }
+      catch { return null; }
+    }
+
+
+    // ── Modelos ──────────────────────────────────────────────────
+    function addModelRow(entry) {
+      const row = document.createElement("div"); row.className = "row";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = true; cb.disabled = true; cb.id = "m-" + entry.cfg.id;
+      const label = document.createElement("label"); label.htmlFor = cb.id; label.textContent = entry.cfg.name || entry.cfg.id;
+      label.title = (entry.cfg.name || "") + (entry.cfg.size ? " · " + fsize(entry.cfg.size) : "");
+      const state = document.createElement("span"); state.className = "state"; state.textContent = "en cola";
+      cb.onchange = () => { entry.enabled = cb.checked; scheduleFilter(); };
+      row.append(cb, label, state); $("models-list").appendChild(row);
+      entry.cb = cb; entry.state = state; entry.enabled = true;
+    }
+
+    async function indexModel(entry) {
+      // Tag (ElementId de Revit) → expressID y GlobalId → expressID
+      const modelID = entry.mesh.modelID;
+      for (const t of PRODUCT_TYPES) {
+        let items;
+        try { items = await loader.ifcManager.getAllItemsOfType(modelID, t, true); } catch { items = null; }
+        if (!items) continue;
+        for (const it of items) {
+          if (it == null || it.expressID == null) continue;
+          if (it.Tag && it.Tag.value != null) entry.tagMap.set(String(it.Tag.value), it.expressID);
+          if (it.GlobalId && it.GlobalId.value) entry.gidMap.set(String(it.GlobalId.value), it.expressID);
+        }
+      }
+      entry.indexed = true;
+    }
+
+    async function loadModels() {
+      const cfgs = project.models || [];
+      if (!cfgs.length) {
+        $("models-list").innerHTML = `<div class="hint">Aún no hay modelos publicados.</div>`;
+        overlayText.textContent = project.planos.length ? "Este proyecto aún no tiene modelo 3D. Abre los planos desde el panel." : "Este proyecto aún no tiene contenido publicado.";
+        document.querySelector(".spinner").style.display = "none";
+        document.querySelector(".progress").style.display = "none";
+        buildDashboard();
+        return;
+      }
+      cfgs.forEach((cfg) => { const e = { cfg, mesh: null, tagMap: new Map(), gidMap: new Map(), indexed: false, enabled: true }; entries.push(e); addModelRow(e); });
+
+      let first = true;
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i], nm = entry.cfg.name || entry.cfg.id;
+        overlayText.textContent = "Cargando " + nm + "…"; entry.state.textContent = "cargando…";
+        try {
+          loader.setRequestHeader({ Authorization: "Bearer " + (await getToken()) });
+          const mesh = await new Promise((res, rej) => loader.load(fileUrl(entry.cfg.file_key), res, (evt) => {
+            if (evt.lengthComputable) { const p = Math.round(evt.loaded / evt.total * 100); bar.style.width = p + "%"; overlayText.textContent = `Descargando ${nm}… ${p}%`; entry.state.textContent = p + "%"; }
+          }, rej));
+          entry.mesh = mesh; mesh.visible = entry.enabled; scene.add(mesh);
+          entry.cb.disabled = false; entry.state.textContent = "";
+          if (first) { fitToVisible(); overlay.classList.add("hidden"); first = false; }
+
+          if (entry.cfg.meta_key) {
+            const meta = (await fetchJson(entry.cfg.meta_key)) || [];
+            for (const m of meta) allEls.push({ ...m, tag: String(m.tag), ei: i });
+          }
+          if (entry.cfg.schedules_key) {
+            const sc = await fetchJson(entry.cfg.schedules_key);
+            entry.units = (sc && sc.units) || {};
+            for (const s of (sc && sc.schedules) || []) {
+              if (!schedulesByCat.has(s.cat)) schedulesByCat.set(s.cat, []);
+              schedulesByCat.get(s.cat).push({ name: s.name, fields: s.fields || [] });
+            }
+          }
+          entry.state.textContent = "indexando…";
+          await indexModel(entry);
+          entry.state.textContent = "";
+          updateStat();
+          if (highlightDocs) refreshDocHighlight();
+        } catch (err) {
+          console.error("Error cargando " + entry.cfg.file_key, err);
+          entry.state.textContent = "error"; entry.state.style.color = "var(--danger)"; entry.cb.disabled = true;
+        }
+      }
+      overlay.classList.add("hidden");
+      buildDashboard();
+      if (entries.some((e) => e.mesh)) fitToVisible();
+      else { overlay.classList.remove("hidden"); overlayText.textContent = "No se pudo cargar ningún modelo."; document.querySelector(".spinner").style.display = "none"; }
+      updateStat();
+      openFromHash();
+    }
+
+    $("models-all").onclick = () => {
+      const allOn = entries.every((e) => !e.cb || e.cb.disabled || e.cb.checked);
+      entries.forEach((e) => { if (e.cb && !e.cb.disabled) { e.cb.checked = !allOn; e.enabled = !allOn; } });
+      scheduleFilter();
+    };
+
+    // ── Planos (ventanas PDF sobre el 3D) ────────────────────────
+    const planoWins = new Map(); // grupo+número -> {win, url}
+    const planoKey = (p) => p.grupo + "\u0001" + p.number;
+    let zTop = 10, cascade = 0;
+
+    function renderPlanosList() {
+      const box = $("planos-list");
+      const list = project.planos || [];
+      if (!list.length) { box.innerHTML = `<div class="hint">Aún no hay planos publicados.</div>`; return; }
+      box.innerHTML = "";
+      let lastGroup = null;
+      list.forEach((p, i) => {
+        if (p.grupo !== lastGroup) {
+          lastGroup = p.grupo;
+          const h = document.createElement("div"); h.className = "grp-sub"; h.textContent = p.grupo; box.appendChild(h);
+        }
+        const row = document.createElement("div"); row.className = "row";
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "pl-" + i;
+        const label = document.createElement("label"); label.htmlFor = cb.id; label.textContent = p.name; label.title = p.number + " — " + p.name;
+        const num = document.createElement("span"); num.className = "num"; num.textContent = p.number;
+        cb.onchange = () => cb.checked ? openPlano(p, cb) : closePlano(planoKey(p));
+        row.append(cb, num, label); box.appendChild(row);
+        p._cb = cb;
+      });
+    }
+    $("planos-none").onclick = () => [...planoWins.keys()].forEach(closePlano);
+
+    function makeWindow(title, onClose) {
+      const win = document.createElement("div"); win.className = "float pwin";
+      const off = (cascade++ % 6) * 28;
+      win.style.left = (24 + off) + "px"; win.style.top = (24 + off) + "px"; win.style.zIndex = ++zTop;
+      win.innerHTML = `<div class="ph"><b></b><button class="btn" data-a="max" title="Maximizar">⤢</button><button class="btn" data-a="tab" title="Abrir en pestaña nueva">↗</button><button class="btn" data-a="close" title="Cerrar">✕</button></div><div class="pb"><div class="pload">Cargando…</div></div>`;
+      win.querySelector("b").textContent = title; win.querySelector("b").title = title;
+      win.addEventListener("pointerdown", () => (win.style.zIndex = ++zTop));
+      win.querySelector('[data-a="max"]').onclick = () => win.classList.toggle("max");
+      win.querySelector('[data-a="close"]').onclick = onClose;
+      // Arrastrar por la barra de título
+      const head = win.querySelector(".ph");
+      head.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("button") || win.classList.contains("max")) return;
+        const sx = e.clientX, sy = e.clientY, ox = win.offsetLeft, oy = win.offsetTop;
+        head.setPointerCapture(e.pointerId); document.body.classList.add("dragging");
+        const move = (ev) => {
+          win.style.left = Math.min(Math.max(ox + ev.clientX - sx, -win.offsetWidth + 80), viewport.clientWidth - 60) + "px";
+          win.style.top = Math.min(Math.max(oy + ev.clientY - sy, 0), viewport.clientHeight - 36) + "px";
+        };
+        const up = () => { head.removeEventListener("pointermove", move); head.removeEventListener("pointerup", up); document.body.classList.remove("dragging"); };
+        head.addEventListener("pointermove", move); head.addEventListener("pointerup", up);
+      });
+      viewport.appendChild(win);
+      return win;
+    }
+
+    function showInWindow(win, url, contentType, name) {
+      const body = win.querySelector(".pb");
+      const isImg = /^image\//.test(contentType || "");
+      const isPdf = /pdf/.test(contentType || "") || /\.pdf$/i.test(name || "");
+      win.querySelector('[data-a="tab"]').onclick = () => window.open(url, "_blank");
+      if (isImg) body.innerHTML = `<img alt="">`, body.querySelector("img").src = url;
+      else if (isPdf) body.innerHTML = `<iframe title=""></iframe>`, body.querySelector("iframe").src = url;
+      else body.innerHTML = `<div class="pload" style="flex-direction:column;gap:10px">Vista previa no disponible<a class="btn" download></a></div>`,
+        Object.assign(body.querySelector("a"), { href: url, download: name || "archivo", textContent: "Descargar " + (name || "") });
+    }
+
+    async function openPlano(p, cb) {
+      const k = planoKey(p);
+      if (planoWins.has(k)) return;
+      const win = makeWindow(p.number + " — " + p.name, () => { if (cb) cb.checked = false; closePlano(k); });
+      const rec = { win, url: null }; planoWins.set(k, rec);
+      try {
+        rec.url = await blobUrl(fileUrl(p.file_key));
+        if (!planoWins.has(k)) { URL.revokeObjectURL(rec.url); return; }
+        showInWindow(win, rec.url, "application/pdf", p.name + ".pdf");
+      } catch (e) { win.querySelector(".pb").innerHTML = `<div class="pload">No se pudo abrir el plano (${esc(e.message)})</div>`; }
+    }
+    function closePlano(k) {
+      const rec = planoWins.get(k); if (!rec) return;
+      rec.win.remove(); if (rec.url) URL.revokeObjectURL(rec.url);
+      planoWins.delete(k);
+      const p = (project.planos || []).find((x) => planoKey(x) === k); if (p && p._cb) p._cb.checked = false;
+    }
+
+    // ── Pestañas de la barra superior: Modelo 3D | Planos ────────
+    let pvUrl = null, pvCurrent = null;
+    const closedGroups = new Set();
+    function setView(v) {
+      document.querySelectorAll("#views button").forEach((b) => b.classList.toggle("on", b.dataset.view === v));
+      $("main").hidden = v !== "3d";
+      $("planos-view").hidden = v !== "planos";
+      document.querySelectorAll(".v3d").forEach((b) => (b.hidden = v !== "3d"));
+      if (v === "planos") renderPlanosView(); else onResize();
+    }
+    document.querySelectorAll("#views button").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
+
+    function planoGroups() {
+      // Un grupo por cada modelo (aunque no tenga planos todavía) + los grupos que tengan planos
+      const groups = new Map();
+      for (const m of project.models || []) groups.set(m.name, []);
+      for (const p of project.planos || []) { if (!groups.has(p.grupo)) groups.set(p.grupo, []); groups.get(p.grupo).push(p); }
+      return [...groups.entries()].filter(([g, list]) => list.length || (project.models || []).some((m) => m.name === g));
+    }
+
+    function renderPlanosView() {
+      const box = $("pv-list"); box.innerHTML = "";
+      $("planos-count").textContent = (project.planos || []).length || "";
+      const groups = planoGroups();
+      if (!(project.planos || []).length) {
+        box.innerHTML = `<div class="hint">Este proyecto aún no tiene planos publicados.${project.can_edit ? " Súbelos desde la página de inicio → Gestionar, o publícalos desde Revit." : ""}</div>`;
+        return;
+      }
+      for (const [g, list] of groups) {
+        if (!list.length) continue;
+        const el = document.createElement("div"); el.className = "grp" + (closedGroups.has(g) ? " closed" : "");
+        const h = document.createElement("div"); h.className = "grp-h";
+        h.innerHTML = `<span class="car">▼</span><span class="gn"></span><span class="gc">${list.length}</span>` + (project.can_edit ? `<button class="ed" title="Cambiar nombre del grupo">✎</button>` : "");
+        h.querySelector(".gn").textContent = g; h.querySelector(".gn").title = g;
+        h.onclick = (e) => { if (e.target.closest(".ed, input")) return; closedGroups.has(g) ? closedGroups.delete(g) : closedGroups.add(g); el.classList.toggle("closed"); };
+        if (project.can_edit) h.querySelector(".ed").onclick = () => editGroup(h, g);
+        const b = document.createElement("div"); b.className = "grp-b";
+        for (const p of list) {
+          const r = document.createElement("div"); r.className = "pl" + (pvCurrent === planoKey(p) ? " on" : "");
+          r.innerHTML = `<span class="num"></span><span class="nm"></span>`;
+          r.querySelector(".num").textContent = p.number; r.querySelector(".nm").textContent = p.name; r.title = p.number + " — " + p.name;
+          r.onclick = () => showPlano(p);
+          b.appendChild(r);
+        }
+        el.append(h, b); box.appendChild(el);
+      }
+    }
+
+    function editGroup(h, g) {
+      const gn = h.querySelector(".gn"), ed = h.querySelector(".ed");
+      const inp = document.createElement("input"); inp.type = "text"; inp.value = g; inp.maxLength = 80;
+      gn.replaceWith(inp); ed.hidden = true; inp.focus(); inp.select();
+      let done = false;
+      const finish = async (save) => {
+        if (done) return; done = true;
+        const to = inp.value.replace(/\s+/g, " ").trim();
+        if (save && to && to !== g) {
+          try {
+            const r = await api(`/api/admin/projects/${project.slug}/planos-group`, { method: "POST", json: { from: g, to } });
+            for (const p of project.planos) if (p.grupo === g) { const was = planoKey(p); p.grupo = r.grupo; if (pvCurrent === was) pvCurrent = planoKey(p); }
+            project.planos.sort((a, b) => a.grupo.localeCompare(b.grupo, "es") || a.number.localeCompare(b.number, "es", { numeric: true }));
+            renderPlanosList();
+          } catch (e) { alert(e.message); }
+        }
+        renderPlanosView();
+      };
+      inp.onkeydown = (e) => { if (e.key === "Enter") finish(true); if (e.key === "Escape") finish(false); };
+      inp.onblur = () => finish(true);
+    }
+
+    async function showPlano(p) {
+      const k = planoKey(p); pvCurrent = k;
+      document.querySelectorAll("#pv-list .pl").forEach((r) => r.classList.remove("on"));
+      renderPlanosView();
+      $("pv-title").textContent = `${p.number} — ${p.name}`;
+      $("pv-body").innerHTML = `<div class="pload">Cargando plano…</div>`;
+      $("pv-tab").hidden = $("pv-dl").hidden = true;
+      try {
+        const url = await blobUrl(fileUrl(p.file_key));
+        if (pvCurrent !== k) { URL.revokeObjectURL(url); return; }
+        if (pvUrl) URL.revokeObjectURL(pvUrl);
+        pvUrl = url;
+        $("pv-body").innerHTML = `<iframe title="Plano"></iframe>`;
+        $("pv-body").querySelector("iframe").src = url;
+        $("pv-tab").hidden = $("pv-dl").hidden = false;
+        $("pv-tab").onclick = () => window.open(url, "_blank");
+        $("pv-dl").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = `${p.number} ${p.name}.pdf`; a.click(); };
+      } catch (e) { $("pv-body").innerHTML = `<div class="pload">No se pudo abrir el plano (${esc(e.message)})</div>`; }
+    }
+
+    // ── Pestañas del panel ───────────────────────────────────────
+    document.querySelectorAll(".tab").forEach((t) => t.onclick = () => {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === t));
+      document.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = p.dataset.pane !== t.dataset.tab));
+    });
+
+    // ── Cantidades (dashboard) ───────────────────────────────────
+    function buildDashboard() {
+      const fset = new Set(["Conteo"]);
+      for (const el of allEls) for (const k in (el.q || {})) fset.add(k);
+      fields = ["Conteo", ...[...fset].filter((f) => f !== "Conteo").sort((a, b) => a.localeCompare(b, "es"))];
+      const fsel = $("field-select");
+      fsel.innerHTML = fields.map((f) => `<option value="${esc(f)}">${esc(f)}${unitFor(f) ? " (" + esc(unitFor(f)) + ")" : ""}</option>`).join("");
+      fsel.value = curField = "Conteo";
+      fsel.onchange = () => { curField = fsel.value; renderCats(); };
+      allLvls = [...new Set(allEls.map((e) => e.lvl))].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+      allCats = [...new Set(allEls.map((e) => e.cat))].sort((a, b) => a.localeCompare(b, "es"));
+      allLvls.forEach((l) => lvlSel.add(l)); allCats.forEach((c) => catSel.add(c));
+      const none = !allEls.length;
+      ["card-metric", "card-levels", "card-cats"].forEach((id) => ($(id).hidden = none));
+      $("cant-empty").hidden = !none;
+      if (!none) { renderLevels(); renderCats(); }
+    }
+    function renderLevels() {
+      const box = $("levels-list"); box.innerHTML = "";
+      allLvls.forEach((l) => {
+        const chip = document.createElement("span"); chip.className = "chip" + (lvlSel.has(l) ? " on" : ""); chip.textContent = l;
+        chip.onclick = () => { lvlSel.has(l) ? lvlSel.delete(l) : lvlSel.add(l); chip.classList.toggle("on"); renderCats(); scheduleFilter(); };
+        box.appendChild(chip);
+      });
+      $("lvl-toggle").onclick = () => { const all = lvlSel.size === allLvls.length; lvlSel.clear(); if (!all) allLvls.forEach((l) => lvlSel.add(l)); renderLevels(); renderCats(); scheduleFilter(); };
+    }
+    const filteredEls = () => allEls.filter((e) => lvlSel.has(e.lvl));
+    const valOf = (el, f) => f === "Conteo" ? 1 : (el.q && typeof el.q[f] === "number" ? el.q[f] : 0);
+    function renderCats() {
+      const box = $("cats-list"); box.innerHTML = "";
+      const agg = new Map();
+      for (const el of filteredEls()) agg.set(el.cat, (agg.get(el.cat) || 0) + valOf(el, curField));
+      const max = Math.max(1, ...agg.values()); let total = 0;
+      allCats.forEach((c) => {
+        const v = agg.get(c) || 0; total += v;
+        const rowEl = document.createElement("div"); rowEl.className = "catrow" + (catSel.has(c) ? " sel" : "");
+        const top = document.createElement("div"); top.className = "top";
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = catSel.has(c);
+        cb.onchange = () => { cb.checked ? catSel.add(c) : catSel.delete(c); rowEl.classList.toggle("sel", cb.checked); scheduleFilter(); };
+        const name = document.createElement("span"); name.className = "name"; name.textContent = c; name.title = c; name.onclick = () => openCatDrill(c);
+        const val = document.createElement("span"); val.className = "val"; val.textContent = fmt(v);
+        top.append(cb, name, val);
+        const barw = document.createElement("div"); barw.className = "bar"; const bi = document.createElement("div"); bi.style.width = (v / max * 100) + "%"; barw.appendChild(bi);
+        rowEl.append(top, barw); box.appendChild(rowEl);
+      });
+      $("cats-total").textContent = fmt(total) + (unitFor(curField) ? " " + unitFor(curField) : "");
+      $("cat-toggle").onclick = () => { const all = catSel.size === allCats.length; catSel.clear(); if (!all) allCats.forEach((c) => catSel.add(c)); renderCats(); scheduleFilter(); };
+    }
+    const drill = $("drill"), drillBody = $("drill-body");
+    $("drill-close").onclick = () => (drill.style.display = "none");
+    function drillTable(rows, firstCol, cls) {
+      const total = rows.reduce((s, r) => s + r.val, 0), count = rows.reduce((s, r) => s + r.count, 0);
+      return `<table><thead><tr><th>${firstCol}</th><th class="num">Conteo</th><th class="num">${esc(curField)}</th></tr></thead><tbody>`
+        + rows.map((r) => `<tr class="${cls}" data-k="${esc(r.k)}"><td>${esc(r.k)}</td><td class="num">${fmt(r.count)}</td><td class="num">${fmt(r.val)}</td></tr>`).join("")
+        + `</tbody><tfoot><tr><th>Total</th><th class="num">${fmt(count)}</th><th class="num">${fmt(total)}</th></tr></tfoot></table>`;
+    }
+    function group(els, key) {
+      const m = new Map();
+      for (const el of els) { const k = el[key]; if (!m.has(k)) m.set(k, { k, count: 0, val: 0 }); const r = m.get(k); r.count++; r.val += valOf(el, curField); }
+      return [...m.values()];
+    }
+    function openCatDrill(cat) {
+      const els = filteredEls().filter((e) => e.cat === cat), u = unitFor(curField);
+      drillBody.innerHTML = `<h3>${esc(cat)}</h3><div class="sub">Métrica: <b>${esc(curField)}</b>${u ? " (" + esc(u) + ")" : ""} · ${els.length} elemento(s)</div>`
+        + drillTable(group(els, "typ").sort((a, b) => b.val - a.val), "Tipo", "click") + `<div class="hint" style="margin-top:6px">Clic en un tipo para desglosar por nivel.</div>`;
+      drill.style.display = "block";
+      drillBody.querySelectorAll("tr.click").forEach((tr) => tr.onclick = () => openTypeDrill(cat, tr.dataset.k));
+    }
+    function openTypeDrill(cat, typ) {
+      const els = filteredEls().filter((e) => e.cat === cat && e.typ === typ);
+      drillBody.innerHTML = `<span class="back" id="drill-back">◂ ${esc(cat)}</span><h3>${esc(typ)}</h3><div class="sub">${esc(cat)} · Métrica: <b>${esc(curField)}</b></div>`
+        + drillTable(group(els, "lvl").sort((a, b) => a.k.localeCompare(b.k, "es", { numeric: true })), "Nivel", "");
+      drill.style.display = "block";
+      $("drill-back").onclick = () => openCatDrill(cat);
+    }
+
+    // ── Filtro 3D (modelos prendidos + categorías + niveles) ─────
+    function scheduleFilter() { clearTimeout(filterTimer); filterTimer = setTimeout(applyFilter, 120); }
+    const isElVisible = (m) => catSel.has(m.cat) && lvlSel.has(m.lvl);
+    const filterActive = () => allEls.length && !(catSel.size === allCats.length && lvlSel.size === allLvls.length);
+
+    function applyFilter() {
+      const active = filterActive();
+      entries.forEach((entry, i) => {
+        if (!entry.mesh) return;
+        if (!entry.enabled || !active || !entry.indexed) { removeSubset(entry, "flt"); entry.mesh.visible = entry.enabled; return; }
+        const ids = [];
+        for (const el of allEls) {
+          if (el.ei !== i || !isElVisible(el)) continue;
+          const ex = entry.tagMap.get(el.tag); if (ex != null) ids.push(ex);
+        }
+        entry.mesh.visible = false;
+        if (ids.length) {
+          try { entry.subset = loader.ifcManager.createSubset({ modelID: entry.mesh.modelID, ids, scene, removePrevious: true, customID: "flt" }); }
+          catch (e) { console.warn(e); entry.mesh.visible = true; }
+        } else removeSubset(entry, "flt");
+      });
+      if (selected && !selected.entry.enabled) clearSelection();
+      refreshDocHighlight();
+      updateStat();
+    }
+    function removeSubset(entry, customID) {
+      try { loader.ifcManager.removeSubset(entry.mesh.modelID, customID === "flt" ? undefined : (customID === "sel" ? selMat : docMat), customID); } catch {}
+      if (customID === "flt" && entry.subset) { if (entry.subset.parent) entry.subset.parent.remove(entry.subset); entry.subset = null; }
+    }
+    function currentMeshes() {
+      const ms = [];
+      for (const e of entries) { if (!e.mesh || !e.enabled) continue; if (e.subset) ms.push(e.subset); else if (e.mesh.visible) ms.push(e.mesh); }
+      return ms;
+    }
+    function updateStat() {
+      let tris = 0; for (const m of currentMeshes()) if (m.geometry && m.geometry.index) tris += m.geometry.index.count / 3;
+      const on = entries.filter((e) => e.mesh && e.enabled).length;
+      $("stat").textContent = `${on}/${entries.length} modelos · ${Math.round(tris).toLocaleString("es")} triángulos` + (allEls.length ? ` · ${allEls.length.toLocaleString("es")} elementos` : "");
+    }
+    function fitBox(box) {
+      if (box.isEmpty()) return;
+      const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 10;
+      controls.target.copy(center);
+      const dir = camera.position.clone().sub(center).normalize();
+      if (!isFinite(dir.x) || dir.lengthSq() < 0.5) dir.set(1, 0.8, 1).normalize();
+      camera.position.copy(center).add(dir.multiplyScalar(maxDim * 2.2));
+      camera.near = Math.max(maxDim / 200, 0.01); camera.far = Math.max(maxDim * 200, 1000); camera.updateProjectionMatrix();
+      controls.update();
+    }
+    function fitToVisible() {
+      const ms = currentMeshes(); if (!ms.length) return;
+      const box = new THREE.Box3(); ms.forEach((m) => box.expandByObject(m));
+      if (box.isEmpty()) return;
+      const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 10;
+      controls.target.copy(center);
+      camera.position.set(center.x + maxDim * 1.6, center.y + maxDim * 1.3, center.z + maxDim * 1.6);
+      camera.near = maxDim / 100; camera.far = maxDim * 100; camera.updateProjectionMatrix();
+      grid.position.y = box.min.y; grid.scale.setScalar(Math.ceil(maxDim / 10) * 20 / 100);
+      controls.update();
+    }
+    // Caja de un subset (su geometría comparte el buffer de posiciones completo → recorrer el índice)
+    function subsetBox(mesh) {
+      const box = new THREE.Box3(), pos = mesh.geometry.attributes.position, idx = mesh.geometry.index, v = new THREE.Vector3();
+      if (!idx) return box.setFromObject(mesh);
+      for (let i = 0; i < idx.count; i++) { v.fromBufferAttribute(pos, idx.getX(i)); box.expandByPoint(v); }
+      return box.applyMatrix4(mesh.matrixWorld);
+    }
+
+    // ── Selección de elementos ───────────────────────────────────
+    const raycaster = new THREE.Raycaster(); raycaster.firstHitOnly = true;
+    const mouse = new THREE.Vector2();
+    let downPos = null;
+    renderer.domElement.addEventListener("pointerdown", (e) => (downPos = { x: e.clientX, y: e.clientY, b: e.button }));
+    renderer.domElement.addEventListener("pointerup", async (e) => {
+      if (!downPos || downPos.b !== 0 || Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 5) return;
+      const meshes = currentMeshes(); if (!meshes.length) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(meshes, true);
+      if (!hits.length) { clearSelection(); return; }
+      const hit = hits[0];
+      const entry = entries.find((en) => en.mesh && en.mesh.modelID === hit.object.modelID);
+      if (!entry) return;
+      const id = loader.ifcManager.getExpressId(hit.object.geometry, hit.faceIndex);
+      if (id != null) selectElement(entry, id, false);
+    });
+
+    async function selectElement(entry, id, zoom) {
+      const modelID = entry.mesh.modelID;
+      if (selected) removeSubset(selected.entry, "sel");
+      let props = {};
+      try { props = await loader.ifcManager.getItemProperties(modelID, id, false); } catch (e) { console.warn(e); }
+      const pv = (v) => v == null ? null : (typeof v === "object" ? (v.value ?? null) : v);
+      const sel = selected = { entry, id, props, tag: pv(props.Tag) != null ? String(pv(props.Tag)) : null, gid: pv(props.GlobalId), name: pv(props.Name) || pv(props.ObjectType) || "Elemento", key: null };
+      const sub = loader.ifcManager.createSubset({ modelID, ids: [id], material: selMat, scene, removePrevious: true, customID: "sel" });
+      if (zoom && sub) fitBox(subsetBox(sub));
+      renderProps();
+      // Tipo, longitud, área y volumen (puede tardar un momento en modelos grandes)
+      try { sel.key = await keyProps(sel, sub); } catch (e) { console.warn(e); sel.key = { tipo: null, vals: {} }; }
+      if (selected === sel) { const kp = document.querySelector("#props .keyprops"); if (kp) kp.outerHTML = keyPropsHtml(sel); }
+      location.hash = "";
+    }
+    function clearSelection() {
+      if (selected) removeSubset(selected.entry, "sel");
+      selected = null; $("props").style.display = "none";
+    }
+
+    // ── Propiedades principales: nombre de tipo, longitud, área y volumen ──
+    // Origen, en orden: 1) datos de Revit (publicado con el plugin)  2) propiedades/cantidades del IFC
+    // 3) calculado de la geometría 3D (aproximado, en metros).
+    const norm = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const KEYS = { lon: ["longitud", "length", "largo"], area: ["area", "superficie"], vol: ["volumen", "volume"] };
+    const kindOf = (name) => { const n = norm(name); for (const k in KEYS) if (KEYS[k].some((w) => n === w || n.startsWith(w + " ") || n.endsWith(" " + w))) return k; return null; };
+    const val = (v) => v == null ? null : (typeof v === "object" ? (v.value ?? null) : v);
+
+    async function keyProps(s, subsetMesh) {
+      const out = { tipo: null, vals: {} };   // vals.lon/area/vol = { v, u, src }
+      const meta = s.tag ? allEls.find((e) => e.tag === s.tag && entries[e.ei] === s.entry) : null;
+      if (meta) {
+        out.tipo = [meta.fam, meta.typ].filter((x) => x && x !== "?").join(" : ") || null;
+        for (const k in (meta.q || {})) {
+          const kind = kindOf(k);
+          if (kind && !out.vals[kind] && typeof meta.q[k] === "number") out.vals[kind] = { v: meta.q[k], u: (s.entry.units || {})[k] || unitFor(k) || "", src: "Revit" };
+        }
+      }
+      const need = () => !out.tipo || !out.vals.lon || !out.vals.area || !out.vals.vol;
+      if (need()) {
+        const modelID = s.entry.mesh.modelID, mgr = loader.ifcManager;
+        try {
+          if (!out.tipo) {
+            const types = await mgr.getTypeProperties(modelID, s.id, false);
+            const t = types && types[0]; if (t && val(t.Name)) out.tipo = String(val(t.Name));
+          }
+        } catch {}
+        try {
+          const psets = await mgr.getPropertySets(modelID, s.id, true);
+          for (const ps of psets || []) {
+            for (const q of ps.Quantities || []) {           // IfcElementQuantity
+              const v = val(q.LengthValue) ?? val(q.AreaValue) ?? val(q.VolumeValue);
+              const kind = q.LengthValue ? "lon" : q.AreaValue ? "area" : q.VolumeValue ? "vol" : null;
+              if (kind && !out.vals[kind] && typeof v === "number") out.vals[kind] = { v, u: { lon: "m", area: "m²", vol: "m³" }[kind], src: "IFC" };
+            }
+            for (const p of ps.HasProperties || []) {        // IfcPropertySet
+              const kind = kindOf(val(p.Name)), v = val(p.NominalValue);
+              if (kind && !out.vals[kind] && typeof v === "number" && v > 0) out.vals[kind] = { v, u: { lon: "m", area: "m²", vol: "m³" }[kind], src: "IFC" };
+            }
+          }
+        } catch (e) { console.warn(e); }
+        if (!out.tipo) { const ot = val(s.props.ObjectType); if (ot) out.tipo = String(ot); }
+      }
+      if (subsetMesh && (!out.vals.lon || !out.vals.area || !out.vals.vol)) {
+        const g = geomProps(subsetMesh);
+        if (g) for (const kind of ["lon", "area", "vol"]) if (!out.vals[kind] && g[kind] > 0) out.vals[kind] = { v: g[kind], u: { lon: "m", area: "m²", vol: "m³" }[kind], src: "geo" };
+      }
+      return out;
+    }
+
+    // Medidas aproximadas desde la malla: volumen (si la malla es cerrada), área de superficie y
+    // longitud a lo largo del eje principal del elemento.
+    function geomProps(mesh) {
+      const pos = mesh.geometry.attributes.position, idx = mesh.geometry.index;
+      if (!pos || !idx || !idx.count) return null;
+      const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), ab = new THREE.Vector3(), ac = new THREE.Vector3(), n = new THREE.Vector3();
+      let area = 0, vol = 0; const used = new Set();
+      for (let i = 0; i < idx.count; i += 3) {
+        const i0 = idx.getX(i), i1 = idx.getX(i + 1), i2 = idx.getX(i + 2);
+        used.add(i0); used.add(i1); used.add(i2);
+        a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+        n.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+        area += n.length() / 2;
+        vol += a.dot(n.crossVectors(b, c)) / 6;
+      }
+      // Eje principal (PCA por iteración de potencias) → longitud = extensión sobre ese eje
+      const pts = [...used], m = new THREE.Vector3();
+      for (const i of pts) m.add(a.fromBufferAttribute(pos, i)); m.divideScalar(pts.length);
+      let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+      for (const i of pts) { a.fromBufferAttribute(pos, i).sub(m); xx += a.x * a.x; xy += a.x * a.y; xz += a.x * a.z; yy += a.y * a.y; yz += a.y * a.z; zz += a.z * a.z; }
+      let d = new THREE.Vector3(1, 0.7, 0.4).normalize();
+      for (let k = 0; k < 40; k++) { d.set(xx * d.x + xy * d.y + xz * d.z, xy * d.x + yy * d.y + yz * d.z, xz * d.x + yz * d.y + zz * d.z); if (d.lengthSq() === 0) break; d.normalize(); }
+      let lo = Infinity, hi = -Infinity;
+      for (const i of pts) { const t = a.fromBufferAttribute(pos, i).dot(d); if (t < lo) lo = t; if (t > hi) hi = t; }
+      const sc = new THREE.Vector3().setFromMatrixScale(mesh.matrixWorld).x || 1;
+      return { lon: (hi - lo) * sc, area: area * sc * sc, vol: Math.abs(vol) * sc * sc * sc };
+    }
+
+    // Cantidades: 2 decimales, o 3 cifras significativas si el valor es pequeño (p. ej. 0,0032 m³)
+    const fmtQ = (n) => Math.abs(n) >= 1 || n === 0 ? fmt(n) : Number(n.toPrecision(3)).toLocaleString("es", { maximumFractionDigits: 8 });
+
+    function keyPropsHtml(s) {
+      const k = s.key;
+      const cell = (label, x) => `<div class="kp"><div class="kl">${label}</div><div class="kv">${!k ? "…" : x ? (x.src === "geo" ? "≈ " : "") + fmtQ(x.v) + (x.u ? ` <span class="ku">${esc(x.u)}</span>` : "") : "—"}</div></div>`;
+      const vals = k ? k.vals : {};
+      const srcs = new Set(Object.values(vals).map((x) => x.src));
+      const note = !k ? "" : srcs.has("geo") ? "≈ medido sobre la geometría 3D (aproximado). Publica desde Revit para tener los valores exactos."
+        : srcs.has("Revit") ? "Valores de Revit, en las unidades del proyecto." : srcs.has("IFC") ? "Valores leídos del archivo IFC." : "";
+      return `<div class="keyprops"><div class="kp wide"><div class="kl">Nombre de tipo</div><div class="kv">${!k ? "…" : esc(k.tipo || "—")}</div></div>`
+        + cell("Longitud", vals.lon) + cell("Área", vals.area) + cell("Volumen", vals.vol)
+        + (note ? `<div class="src">${note}</div>` : "") + `</div>`;
+    }
+
+    const docsOf = (s) => docs.filter((d) => d.model_id === s.entry.cfg.id && ((s.tag && d.element_tag === s.tag) || (s.gid && d.global_id === s.gid)));
+    const typeLabel = (d) => ((d.file_name || "").split(".").pop() || "DOC").slice(0, 4).toUpperCase();
+
+    function renderProps() {
+      const s = selected; if (!s) return;
+      const meta = s.tag ? allEls.find((e) => e.tag === s.tag && entries[e.ei] === s.entry) : null;
+      const rows = [["Modelo", s.entry.cfg.name]];
+      if (meta) {
+        rows.push(["Categoría", meta.cat], ["Familia", meta.fam], ["Tipo", meta.typ], ["Nivel", meta.lvl]);
+        for (const k in (meta.q || {})) if (k !== "Conteo") rows.push([k, fmt(meta.q[k])]);
+      } else {
+        const ot = s.props.ObjectType && s.props.ObjectType.value; if (ot) rows.push(["Tipo", ot]);
+      }
+      if (s.tag) rows.push(["ElementId", s.tag]);
+      if (s.gid) rows.push(["GlobalId", s.gid]);
+
+      const list = docsOf(s);
+      const canUp = project.allow_docs;
+      let html = `<span class="x" id="props-close">✕</span><h3>${esc(s.name)}</h3>` + keyPropsHtml(s)
+        + `<details class="more"><summary>Más propiedades</summary><table>${rows.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join("")}</table></details>`
+        + `<div class="docsec"><h4>📎 Fichas técnicas (${list.length})</h4>`
+        + (list.length ? list.map((d) => `<div class="docrow"><div class="dn"><b title="${esc(d.title)}">${esc(d.title)}</b><span class="tiny">${esc(d.file_name)} · ${fsize(d.size || 0)} · ${esc(d.uploaded_by)} · ${fdate(d.uploaded_at)}</span></div>
+            <button class="btn sm" data-open="${d.id}">Ver</button>${(project.admin || d.uploaded_by === project.me.email) ? `<button class="btn sm danger" data-del="${d.id}" title="Borrar">✕</button>` : ""}</div>`).join("")
+          : `<div class="hint">Este elemento no tiene fichas técnicas.</div>`);
+      if (canUp) {
+        html += `<div class="upl"><input type="file" id="up-file" accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.dwg,.zip">
+          <input type="text" id="up-title" placeholder="Título (ej. Ficha técnica luminaria LED 18W)">
+          <button class="btn primary" id="up-btn">Adjuntar ficha técnica</button>
+          <div class="pbar" hidden><div></div></div><div class="tiny" id="up-msg"></div></div>`;
+      }
+      html += `</div>`;
+      const box = $("props"); box.innerHTML = html; box.style.display = "block";
+      $("props-close").onclick = clearSelection;
+      box.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => openDoc(docs.find((d) => d.id == b.dataset.open)));
+      box.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => deleteDoc(Number(b.dataset.del)));
+      if (canUp) {
+        $("up-file").onchange = () => { const f = $("up-file").files[0]; if (f && !$("up-title").value) $("up-title").value = f.name.replace(/\.[^.]+$/, ""); };
+        $("up-btn").onclick = uploadDoc;
+      }
+    }
+
+    async function uploadDoc() {
+      const s = selected, f = $("up-file").files[0], msg = $("up-msg");
+      if (!f) { msg.textContent = "Elige un archivo."; return; }
+      if (f.size > 50 * 1048576) { msg.textContent = "El archivo supera 50 MB."; return; }
+      const q = new URLSearchParams({ model: s.entry.cfg.id, filename: f.name, title: $("up-title").value.trim() || f.name, name: s.name || "" });
+      if (s.tag) q.set("tag", s.tag);
+      if (s.gid) q.set("gid", s.gid);
+      const pbar = document.querySelector("#props .pbar"), pin = pbar.firstElementChild;
+      $("up-btn").disabled = true; pbar.hidden = false; msg.textContent = "Subiendo…";
+      const token = await getToken();
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", `${API}/docs?${q}`);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.setRequestHeader("Content-Type", f.type || "application/octet-stream");
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) pin.style.width = (e.loaded / e.total * 100) + "%"; };
+      xhr.onload = async () => {
+        if (xhr.status >= 200 && xhr.status < 300) { await loadDocs(); if (selected === s) renderProps(); }
+        else { let m = "HTTP " + xhr.status; try { m = JSON.parse(xhr.responseText).error || m; } catch {} msg.textContent = "Error: " + m; $("up-btn").disabled = false; }
+      };
+      xhr.onerror = () => { msg.textContent = "Error de red."; $("up-btn").disabled = false; };
+      xhr.send(f);
+    }
+
+    async function deleteDoc(id) {
+      const d = docs.find((x) => x.id === id);
+      if (!d || !confirm(`¿Borrar la ficha "${d.title}"?`)) return;
+      try { await api(`${API}/docs/${id}`, { method: "DELETE" }); await loadDocs(); renderProps(); }
+      catch (e) { alert(e.message); }
+    }
+
+    const docWins = new Map();
+    async function openDoc(d) {
+      if (!d) return;
+      if (docWins.has(d.id)) { docWins.get(d.id).win.style.zIndex = ++zTop; return; }
+      const win = makeWindow("📎 " + d.title, () => { const r = docWins.get(d.id); if (r) { r.win.remove(); if (r.url) URL.revokeObjectURL(r.url); docWins.delete(d.id); } });
+      const rec = { win, url: null }; docWins.set(d.id, rec);
+      try { rec.url = await blobUrl(`${API}/docs/${d.id}/file`); showInWindow(win, rec.url, d.content_type, d.file_name); }
+      catch (e) { win.querySelector(".pb").innerHTML = `<div class="pload">No se pudo abrir (${esc(e.message)})</div>`; }
+    }
+
+    // ── Fichas: lista + resaltado ────────────────────────────────
+    async function loadDocs() {
+      try { docs = (await api(`${API}/docs`)).docs || []; } catch (e) { console.warn(e); docs = []; }
+      $("docs-count").textContent = docs.length;
+      renderDocsList();
+      refreshDocHighlight();
+    }
+    function renderDocsList() {
+      const f = $("docs-filter").value.trim().toLowerCase();
+      const list = docs.filter((d) => !f || [d.title, d.element_name, d.file_name, d.uploaded_by].join(" ").toLowerCase().includes(f));
+      $("docs-list").innerHTML = list.length ? list.map((d) => {
+        const m = entries.find((e) => e.cfg.id === d.model_id);
+        return `<div class="docitem" data-id="${d.id}"><div class="ic">${esc(typeLabel(d))}</div><div><div class="dt">${esc(d.title)}</div>
+          <div class="dm">${esc(d.element_name || "Elemento")} · ${esc(m ? m.cfg.name : d.model_id)}</div><div class="dm">${esc(d.uploaded_by)} · ${fdate(d.uploaded_at)}</div></div></div>`;
+      }).join("") : `<div class="hint">${docs.length ? "Sin resultados." : "Aún no hay fichas técnicas en este proyecto."}</div>`;
+      $("docs-list").querySelectorAll(".docitem").forEach((el) => el.onclick = () => locateDoc(docs.find((d) => d.id == el.dataset.id)));
+    }
+    $("docs-filter").oninput = renderDocsList;
+
+    function expressIdForDoc(entry, d) {
+      if (d.element_tag && entry.tagMap.has(d.element_tag)) return entry.tagMap.get(d.element_tag);
+      if (d.global_id && entry.gidMap.has(d.global_id)) return entry.gidMap.get(d.global_id);
+      return null;
+    }
+    function locateDoc(d) {
+      const entry = entries.find((e) => e.cfg.id === d.model_id && e.mesh);
+      if (!entry) { alert("El modelo de esta ficha no está cargado."); return; }
+      if (!entry.indexed) { alert("El modelo aún se está indexando; intenta en unos segundos."); return; }
+      const id = expressIdForDoc(entry, d);
+      if (id == null) { openDoc(d); return; }
+      if (!entry.enabled) { entry.enabled = true; entry.cb.checked = true; applyFilter(); }
+      selectElement(entry, id, true);
+    }
+    // Link directo a una ficha: /p/<share>#doc=<id>
+    function openFromHash() {
+      const m = location.hash.match(/doc=(\d+)/); if (!m) return;
+      const d = docs.find((x) => x.id == m[1]); if (d) locateDoc(d);
+    }
+
+    function refreshDocHighlight() {
+      entries.forEach((entry, i) => {
+        if (!entry.mesh) return;
+        removeSubset(entry, "docs");
+        if (!highlightDocs || !entry.enabled || !entry.indexed) return;
+        const active = filterActive();
+        const ids = [];
+        for (const d of docs) {
+          if (d.model_id !== entry.cfg.id) continue;
+          const id = expressIdForDoc(entry, d); if (id == null) continue;
+          if (active && d.element_tag) { const el = allEls.find((e) => e.ei === i && e.tag === d.element_tag); if (el && !isElVisible(el)) continue; }
+          ids.push(id);
+        }
+        if (ids.length) try { loader.ifcManager.createSubset({ modelID: entry.mesh.modelID, ids, material: docMat, scene, removePrevious: true, customID: "docs" }); } catch (e) { console.warn(e); }
+      });
+    }
+    $("btn-hl").onclick = () => { highlightDocs = !highlightDocs; $("btn-hl").classList.toggle("on", highlightDocs); refreshDocHighlight(); };
+
+    // ── Botones ──────────────────────────────────────────────────
+    $("btn-fit").onclick = fitToVisible;
+    $("btn-side").onclick = () => $("side").classList.toggle("collapsed");
+    $("btn-reset").onclick = () => {
+      catSel.clear(); allCats.forEach((c) => catSel.add(c)); lvlSel.clear(); allLvls.forEach((l) => lvlSel.add(l));
+      entries.forEach((e) => { if (e.cb && !e.cb.disabled) { e.cb.checked = true; e.enabled = true; } });
+      if (allEls.length) { renderLevels(); renderCats(); }
+      applyFilter(); fitToVisible();
+    };
+    let wire = false;
+    $("btn-wire").onclick = () => {
+      wire = !wire; $("btn-wire").classList.toggle("on", wire);
+      entries.forEach((e) => e.mesh && e.mesh.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((mm) => { if (mm !== selMat && mm !== docMat) mm.wireframe = wire; }); }));
+    };
+    // Depuración local
+    if (["localhost", "127.0.0.1"].includes(location.hostname)) window.__visor = { entries, selectElement, locateDoc, get docs() { return docs; } };
+
+    $("btn-full").onclick = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); };
+
+    // ── Arranque ─────────────────────────────────────────────────
+    const user = await requireUser($("login"));
+    userChip($("user"), user);
+    try { project = await api(API); }
+    catch (e) {
+      if (e.status === 403) {
+        document.querySelector("#noaccess h1").textContent = "No tienes acceso a este proyecto";
+        $("noaccess-msg").textContent = `Entraste como ${user.email}. Pide al administrador del proyecto que agregue ese correo, o sal y entra con otra cuenta.`;
+        $("noaccess").hidden = false;
+      }
+      else if (e.status === 404) $("noaccess").hidden = false;
+      else { $("noaccess-msg").textContent = "Error: " + e.message; $("noaccess").hidden = false; }
+      throw e;
+    }
+    document.title = project.name + " · Visor 3D";
+    $("pname").textContent = project.name;
+    renderPlanosList();
+    $("planos-count").textContent = (project.planos || []).length || "";
+    // Avance de obra + notificaciones (cada aviso vende la página de ventas con respuesta automática)
+    const nctx = { share: SHARE, proyecto: project.name, user };
+    if (project.avance) {
+      const a = project.avance;
+      $("avchip").innerHTML = barraAvance(a.pct, a.etapa);
+      $("avchip").hidden = false;
+      $("avchip").onclick = () => abrirVenta({ tipo: "avance", titulo: `Avance de obra · ${a.etapa}`, pct: a.pct, etapa: a.etapa }, nctx);
+    }
+    montarCampana($("bell-host"), nctx);
+    loadDocs();
+    await loadModels();
+  </script>
+</body>
+</html>

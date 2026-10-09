@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Revit 2025 y 2026. Compilar con:  dotnet build -c Release -p:RevitYear=2025  (o 2026) -->
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AssemblyName>BimHubPublisher</AssemblyName>
+    <RootNamespace>BimHubPublisher</RootNamespace>
+    <RevitYear Condition="'$(RevitYear)' == ''">2025</RevitYear>
+    <!-- Revit 2025 = .NET 8 · Revit 2026 (26.5+) = .NET 10 -->
+    <TargetFramework Condition="'$(RevitYear)' == '2025'">net8.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(RevitYear)' != '2025'">net10.0-windows</TargetFramework>
+    <RevitApiDir Condition="'$(RevitApiDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitYear)\</RevitApiDir>
+    <!-- ElementId.Value (long) existe desde 2024 -->
+    <DefineConstants>$(DefineConstants);REVIT2025</DefineConstants>
+    <OutputPath>bin\$(Configuration)\$(RevitYear)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>None</ResolveAssemblyWarnOrErrorOnTargetArchitectureMismatch>
+    <MSBuildWarningsAsMessages>MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPI"><HintPath>$(RevitApiDir)RevitAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="RevitAPIUI"><HintPath>$(RevitApiDir)RevitAPIUI.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <!-- Copia a la carpeta de add-ins del usuario al compilar -->
+  <Target Name="DeployToRevit" AfterTargets="Build">
+    <PropertyGroup>
+      <RevitAddinsDir>$(AppData)\Autodesk\Revit\Addins\$(RevitYear)\</RevitAddinsDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <DeployFiles Include="$(TargetDir)**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DeployFiles)" DestinationFolder="$(RevitAddinsDir)BimHubPublisher\%(RecursiveDir)" SkipUnchangedFiles="true" ContinueOnError="WarnAndContinue" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\BimHubPublisher.addin" DestinationFolder="$(RevitAddinsDir)" ContinueOnError="WarnAndContinue" />
+    <Message Importance="high" Text="BimHubPublisher → Revit $(RevitYear): $(RevitAddinsDir)" />
+  </Target>
+
+</Project>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>BIM Hub · Publicar</Name>
+    <Assembly>BimHubPublisher\BimHubPublisher.dll</Assembly>
+    <FullClassName>BimHubPublisher.App</FullClassName>
+    <AddInId>368EC63E-7A1B-45FB-AA97-FAE8C4F02ECA</AddInId>
+    <VendorId>JDVB</VendorId>
+    <VendorDescription>Life City BIM — publica modelo IFC, planos PDF y cantidades al BIM Hub (visor con login Google y fichas técnicas)</VendorDescription>
+  </AddIn>
+</RevitAddIns>

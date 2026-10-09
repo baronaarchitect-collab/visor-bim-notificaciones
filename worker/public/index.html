@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BIM Hub · Life City</title>
+  <link rel="stylesheet" href="/css/app.css" />
+  <style>
+    body { overflow-y: auto; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 60px; display: flex; flex-direction: column; gap: 28px; }
+    h2 { font-size: 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+    h2 .tiny { font-weight: 400; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+    .pcard { display: block; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-decoration: none; color: var(--text); }
+    .pcard:hover { border-color: var(--accent); }
+    .pcard b { display: block; font-size: 15px; margin-bottom: 6px; }
+    .empty { color: var(--muted); font-size: 14px; background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; padding: 18px; }
+    .box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .row-form { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row-form input { flex: 1; min-width: 200px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .link { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); }
+    .token-out { margin-top: 10px; padding: 10px; background: #0b2a14; border: 1px solid var(--accent2); border-radius: 8px; font-size: 13px; word-break: break-all; }
+    .token-out code { display: block; margin: 6px 0; font-size: 13px; color: var(--text); }
+    dialog { margin: auto; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 16px; width: min(560px, calc(100% - 32px)); }
+    dialog::backdrop { background: rgba(0,0,0,.6); }
+    .mg h3 { font-size: 16px; margin-bottom: 4px; }
+    .mg h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; }
+    .mg .it { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .mg .it > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mg .up { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+    .mg .up input[type=file] { flex: 1; min-width: 180px; font-size: 12px; color: var(--muted); }
+    .mg .msg { font-size: 12px; color: var(--muted); margin-top: 6px; min-height: 1em; }
+    .mg select { width: auto; }
+    .badge { font-size: 10px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+    .badge.lock { color: var(--warn); border-color: var(--warn); }
+    dialog.wide { width: min(680px, calc(100% - 32px)); max-height: calc(100% - 32px); }
+    .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; z-index: 200; }
+  </style>
+</head>
+<body>
+  <div id="login" hidden>
+    <div class="login-card">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <h1>BIM Hub · Life City</h1>
+      <p>Modelos 3D, planos y fichas técnicas de tus proyectos. Entra con tu cuenta de Google.</p>
+      <button class="gbtn" id="btn-google"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"/></svg>Continuar con Google</button>
+      <div class="login-err" id="login-err"></div>
+    </div>
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      <span>BIM Hub <small>· Life City</small></span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px"><span id="bell-host"></span><div class="user" id="user"></div></div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Mis proyectos <span class="tiny" id="mine-hint"></span></h2>
+      <div id="mine" class="grid"></div>
+    </section>
+
+    <section id="admin" hidden>
+      <h2>Administración</h2>
+      <div class="box" style="margin-bottom:14px">
+        <div class="row-form">
+          <input type="text" id="new-name" placeholder="Nombre del proyecto nuevo (ej. Edificio E Cali)" />
+          <button class="btn primary" id="btn-create">Crear proyecto</button>
+        </div>
+        <div class="hint" style="margin-top:8px">Con <b>Gestionar</b> subes modelos (IFC) y planos (PDF), agregas usuarios y decides quién entra. También puedes publicar desde Revit con el plugin <b>BIM Hub · Publicar</b>.</div>
+      </div>
+      <div class="box table-wrap">
+        <table>
+          <thead><tr><th>Proyecto</th><th>Link para compartir</th><th class="num">Modelos</th><th class="num">Planos</th><th class="num">Fichas</th><th class="num">Visitas</th><th></th></tr></thead>
+          <tbody id="projects-body"></tbody>
+        </table>
+      </div>
+
+      <h2 style="margin-top:24px">Tokens del plugin de Revit</h2>
+      <div class="box">
+        <div class="row-form">
+          <input type="text" id="token-name" placeholder="Nombre del equipo o persona (ej. PC oficina Juan)" />
+          <button class="btn" id="btn-token">Crear token</button>
+        </div>
+        <div id="token-out"></div>
+        <div class="table-wrap" style="margin-top:10px">
+          <table>
+            <thead><tr><th>Nombre</th><th>Creado por</th><th>Creado</th><th>Último uso</th><th></th></tr></thead>
+            <tbody id="tokens-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="dlg" class="wide">
+    <div id="dlg-body"></div>
+    <div style="text-align:right;margin-top:14px"><button class="btn" onclick="this.closest('dialog').close()">Cerrar</button></div>
+  </dialog>
+
+  <script type="module">
+    import { requireUser, loginWithGoogle, api, esc, userChip } from "/js/auth.js";
+    import { manage as openManage } from "/js/manage.js";
+    import { montarCampana, barraAvance } from "/js/notif.js";
+    const $ = (id) => document.getElementById(id);
+
+    $("btn-google").onclick = async () => {
+      $("login-err").textContent = "";
+      try { await loginWithGoogle(); } catch (e) { $("login-err").textContent = e.code === "auth/popup-closed-by-user" ? "" : (e.message || e); }
+    };
+
+    function toast(msg) {
+      const t = document.createElement("div"); t.className = "toast"; t.textContent = msg;
+      document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
+    }
+    const manage = (slug, share, admin) => openManage(slug, share, admin, { dlg: $("dlg"), body: $("dlg-body"), toast, onChange: load });
+    const linkOf = (share) => location.origin + "/p/" + share;
+    const fdate = (s) => s ? new Date(s.replace(" ", "T") + "Z").toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }) : "—";
+
+    const user = await requireUser($("login"));
+    userChip($("user"), user);
+    montarCampana($("bell-host"), { user });
+    await load();
+
+    async function load() {
+      let me;
+      try { me = await api("/api/me"); }
+      catch (e) { $("mine").innerHTML = `<div class="empty">No se pudo cargar: ${esc(e.message)}</div>`; return; }
+
+      const mine = me.projects || [];
+      $("mine-hint").textContent = me.admin ? "(eres administrador: ves todos)" : "";
+      $("mine").innerHTML = mine.length
+        ? mine.map((p) => `<div class="pcard"><a href="/p/${esc(p.share_id)}" style="color:inherit;text-decoration:none"><b>${esc(p.name)}</b></a>${p.av_pct != null ? `<div style="margin:2px 0 8px">${barraAvance(p.av_pct, p.av_etapa)}</div>` : ""}<span class="tiny">${me.admin ? `${p.models} modelo(s) · ${p.planos} plano(s) · ${p.docs} ficha(s)` : (p.role === "editor" ? "Editor" : "Visor") + (p.last_seen ? " · visto " + fdate(p.last_seen) : "")}</span>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap"><a class="btn sm" href="/p/${esc(p.share_id)}">Abrir visor</a>${(me.admin || p.role === "editor") ? `<button class="btn sm" data-manage="${esc(p.slug)}" data-share="${esc(p.share_id)}">Subir modelos / planos</button>` : ""}</div></div>`).join("")
+        : `<div class="empty">Aún no has entrado a ningún proyecto. Abre el link que te compartieron (…/p/código).</div>`;
+
+      $("mine").querySelectorAll("[data-manage]").forEach((b) => b.onclick = () => manage(b.dataset.manage, b.dataset.share, me.admin));
+      $("admin").hidden = !me.admin;
+      if (!me.admin) return;
+      renderProjects(mine);
+      loadTokens();
+    }
+
+    function renderProjects(list) {
+      $("projects-body").innerHTML = list.map((p) => `
+        <tr data-slug="${esc(p.slug)}" data-share="${esc(p.share_id)}">
+          <td><b>${esc(p.name)}</b><div class="tiny">${p.restricted ? `<span class="badge lock">solo usuarios agregados</span>` : `<span class="badge">cualquiera con el link</span>`} · ${p.members} usuario(s)</div></td>
+          <td><span class="link">${esc(linkOf(p.share_id))}</span></td>
+          <td class="num">${p.models}</td><td class="num">${p.planos}</td><td class="num">${p.docs}</td><td class="num">${p.visitors}</td>
+          <td><div class="acts">
+            <button class="btn sm" data-a="copy">Copiar link</button>
+            <a class="btn sm" href="/p/${esc(p.share_id)}">Abrir</a>
+            <button class="btn sm primary" data-a="manage">Gestionar</button>
+            <button class="btn sm" data-a="visits">Visitas</button>
+            <button class="btn sm" data-a="regen" title="El link anterior deja de funcionar">Nuevo link</button>
+            <button class="btn sm danger" data-a="del">Borrar</button>
+          </div></td>
+        </tr>`).join("") || `<tr><td colspan="7" class="hint">Todavía no hay proyectos.</td></tr>`;
+
+      $("projects-body").querySelectorAll("button[data-a]").forEach((b) => b.onclick = async () => {
+        const tr = b.closest("tr"), slug = tr.dataset.slug, share = tr.dataset.share;
+        const name = tr.querySelector("b").textContent;
+        try {
+          if (b.dataset.a === "manage") return manage(slug, share, true);
+          if (b.dataset.a === "copy") { await navigator.clipboard.writeText(linkOf(share)); toast("Link copiado"); }
+          if (b.dataset.a === "visits") {
+            const { visits } = await api(`/api/admin/projects/${slug}/visits`);
+            $("dlg-body").innerHTML = `<h3 style="margin-bottom:10px">Personas que entraron a ${esc(name)}</h3>` + (visits.length
+              ? `<table><thead><tr><th>Nombre</th><th>Correo</th><th>Última vez</th></tr></thead><tbody>${visits.map((v) => `<tr><td>${esc(v.name)}</td><td>${esc(v.email)}</td><td>${fdate(v.last_seen)}</td></tr>`).join("")}</tbody></table>`
+              : `<p class="hint">Nadie ha entrado todavía.</p>`);
+            $("dlg").showModal();
+          }
+          if (b.dataset.a === "regen") {
+            if (!confirm(`¿Generar un link nuevo para "${name}"? El link actual dejará de funcionar.`)) return;
+            await api(`/api/admin/projects/${slug}`, { method: "PATCH", json: { regenerate_link: true } });
+            toast("Link nuevo generado"); load();
+          }
+          if (b.dataset.a === "del") {
+            if (prompt(`Esto borra el proyecto, sus modelos, planos y fichas. Escribe el nombre para confirmar:\n${name}`) !== name) return;
+            await api(`/api/admin/projects/${slug}`, { method: "DELETE" });
+            toast("Proyecto borrado"); load();
+          }
+        } catch (e) { alert(e.message); }
+      });
+    }
+
+    $("btn-create").onclick = async () => {
+      const name = $("new-name").value.trim(); if (!name) return;
+      try { await api("/api/admin/projects", { method: "POST", json: { name } }); $("new-name").value = ""; toast("Proyecto creado"); load(); }
+      catch (e) { alert(e.message); }
+    };
+
+    async function loadTokens() {
+      const { tokens } = await api("/api/admin/tokens");
+      $("tokens-body").innerHTML = tokens.map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.created_by)}</td><td>${fdate(t.created_at)}</td><td>${fdate(t.last_used)}</td>
+        <td><div class="acts"><button class="btn sm danger" data-id="${t.id}">Revocar</button></div></td></tr>`).join("")
+        || `<tr><td colspan="5" class="hint">Sin tokens. Crea uno y pégalo en el plugin de Revit.</td></tr>`;
+      $("tokens-body").querySelectorAll("button[data-id]").forEach((b) => b.onclick = async () => {
+        if (!confirm("¿Revocar este token? El plugin que lo use dejará de poder publicar.")) return;
+        await api(`/api/admin/tokens/${b.dataset.id}`, { method: "DELETE" }); loadTokens();
+      });
+    }
+    $("btn-token").onclick = async () => {
+      try {
+        const { token } = await api("/api/admin/tokens", { method: "POST", json: { name: $("token-name").value.trim() || "Plugin Revit" } });
+        $("token-name").value = "";
+        $("token-out").innerHTML = `<div class="token-out">Copia este token en el plugin de Revit (campo <b>Token</b>). <b>No se volverá a mostrar.</b>
+          <code>${esc(token)}</code><div class="tiny">URL del hub: ${esc(location.origin)}</div>
+          <button class="btn sm" id="copy-token">Copiar token</button></div>`;
+        $("copy-token").onclick = async () => { await navigator.clipboard.writeText(token); toast("Token copiado"); };
+        loadTokens();
+      } catch (e) { alert(e.message); }
+    };
+  </script>
+</body>
+</html>
